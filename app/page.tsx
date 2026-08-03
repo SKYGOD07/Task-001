@@ -270,7 +270,7 @@ export default function Home() {
         <header className="topbar">
           <a className="brand" href="#dashboard" aria-label="Employee Task Tracker home">
             <img alt="" src="/task-logo.png" />
-            <span>NeraVoult Tasks</span>
+            <span>NeuraVoult Tasks</span>
           </a>
           <button
             aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
