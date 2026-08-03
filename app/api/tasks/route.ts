@@ -3,6 +3,13 @@ import { supabase } from '../../../lib/supabase';
 
 export async function GET() {
   try {
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Supabase environment variables are missing in Vercel. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel settings.' },
+        { status: 500 }
+      );
+    }
+
     const { data: tasks, error } = await supabase
       .from('tasks')
       .select('*')
@@ -13,7 +20,7 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ tasks });
+    return NextResponse.json({ tasks: tasks || [] });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
@@ -21,6 +28,13 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Supabase environment variables are missing in Vercel. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel settings.' },
+        { status: 500 }
+      );
+    }
+
     const body = await request.json();
     const { employee_name, task_name, priority } = body;
 
@@ -36,7 +50,6 @@ export async function POST(request: Request) {
     }
 
     // Auto-generate Employee ID
-    // Find the latest employee_id to increment it
     const { data: latestTasks, error: fetchError } = await supabase
       .from('tasks')
       .select('employee_id')
@@ -45,18 +58,16 @@ export async function POST(request: Request) {
 
     if (fetchError) {
       console.error('Error fetching latest task:', fetchError);
-      return NextResponse.json({ error: 'Failed to generate Employee ID' }, { status: 500 });
+      return NextResponse.json({ error: 'Failed to generate Employee ID: ' + fetchError.message }, { status: 500 });
     }
 
     let nextEmpIdNumber = 1;
     if (latestTasks && latestTasks.length > 0) {
       const latestEmpId = latestTasks[0].employee_id;
-      // latestEmpId is like 'EMP001'
       const match = latestEmpId.match(/EMP(\d+)/);
       if (match && match[1]) {
         nextEmpIdNumber = parseInt(match[1], 10) + 1;
       } else {
-        // Fallback if parsing fails
         nextEmpIdNumber = Math.floor(Math.random() * 1000) + 1;
       }
     }

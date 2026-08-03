@@ -6,6 +6,13 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Supabase environment variables are missing in Vercel settings.' },
+        { status: 500 }
+      );
+    }
+
     const { id } = await params;
     const body = await request.json();
     const { status } = body;
