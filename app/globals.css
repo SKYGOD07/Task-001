@@ -453,6 +453,17 @@ select:focus {
   font-weight: 700;
 }
 
+.export-btn {
+  margin-left: 8px;
+  background: var(--surface-muted);
+  font-weight: 700;
+}
+
+.export-btn:hover:not(:disabled) {
+  border-color: var(--success);
+  color: var(--success);
+}
+
 .table-wrap {
   overflow-x: auto;
 }

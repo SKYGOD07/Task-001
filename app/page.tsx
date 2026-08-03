@@ -252,6 +252,33 @@ export default function Home() {
     }
   }
 
+  function exportToCSV() {
+    if (filteredTasks.length === 0) {
+      alert("No tasks available to export.");
+      return;
+    }
+
+    const headers = ["Employee ID", "Employee Name", "Task Name", "Priority", "Status", "Created At"];
+    const rows = filteredTasks.map((t) => [
+      t.employee_id,
+      `"${t.employee_name.replace(/"/g, '""')}"`,
+      `"${t.task_name.replace(/"/g, '""')}"`,
+      t.priority,
+      t.status,
+      `"${new Date(t.created_at).toLocaleString()}"`,
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `tasks_export_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   return (
     <>
       {loading ? (
@@ -409,6 +436,14 @@ export default function Home() {
                     {item === "ALL" ? "All" : titleCase(item)}
                   </button>
                 ))}
+                <button
+                  className="filter export-btn"
+                  onClick={exportToCSV}
+                  type="button"
+                  title="Export current view to CSV"
+                >
+                  📥 Export CSV
+                </button>
               </div>
             </div>
 
