@@ -10,28 +10,27 @@ type Filter = "ALL" | Status;
 
 type Task = {
   id: string;
-  employeeId: string;
-  employeeName: string;
-  taskName: string;
+  employee_id: string;
+  employee_name: string;
+  task_name: string;
   priority: Priority;
   status: Status;
-  createdAt: string;
+  created_at: string;
 };
 
 type FormState = {
-  employeeName: string;
-  taskName: string;
+  employee_name: string;
+  task_name: string;
   priority: Priority | "";
 };
 
 type FormErrors = Partial<Record<keyof FormState, string>>;
 
 const priorities: Priority[] = ["LOW", "MEDIUM", "HIGH"];
-const storageKey = "employee-task-tracker.tasks";
 
 const initialForm: FormState = {
-  employeeName: "",
-  taskName: "",
+  employee_name: "",
+  task_name: "",
   priority: "",
 };
 
@@ -45,15 +44,15 @@ function isPriority(value: string): value is Priority {
 
 function validateForm(form: FormState) {
   const errors: FormErrors = {};
-  const employeeName = normalizeText(form.employeeName);
-  const taskName = normalizeText(form.taskName);
+  const employee_name = normalizeText(form.employee_name);
+  const task_name = normalizeText(form.task_name);
 
-  if (!employeeName) {
-    errors.employeeName = "Employee name is required.";
+  if (!employee_name) {
+    errors.employee_name = "Employee name is required.";
   }
 
-  if (!taskName) {
-    errors.taskName = "Task name is required.";
+  if (!task_name) {
+    errors.task_name = "Task name is required.";
   }
 
   if (!form.priority || !isPriority(form.priority)) {
@@ -63,38 +62,10 @@ function validateForm(form: FormState) {
   return {
     errors,
     values: {
-      employeeName,
-      taskName,
+      employee_name,
+      task_name,
       priority: form.priority,
     },
-  };
-}
-
-function nextEmployeeId(tasks: Task[]) {
-  const nextNumber =
-    tasks.reduce((max, task) => {
-      const match = task.employeeId.match(/^EMP(\d+)$/);
-      return match ? Math.max(max, Number(match[1])) : max;
-    }, 0) + 1;
-
-  return `EMP${String(nextNumber).padStart(3, "0")}`;
-}
-
-function createTask(form: FormState, existingTasks: Task[]): Task {
-  const { values } = validateForm(form);
-
-  if (!isPriority(values.priority)) {
-    throw new Error("Cannot create task with invalid priority.");
-  }
-
-  return {
-    id: crypto.randomUUID(),
-    employeeId: nextEmployeeId(existingTasks),
-    employeeName: values.employeeName,
-    taskName: values.taskName,
-    priority: values.priority,
-    status: "PENDING",
-    createdAt: new Date().toISOString(),
   };
 }
 
@@ -103,34 +74,30 @@ export default function Home() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [errors, setErrors] = useState<FormErrors>({});
   const [filter, setFilter] = useState<Filter>("ALL");
-  const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const loaderRef = useRef<HTMLDivElement>(null);
   const logoRef = useRef<HTMLImageElement>(null);
   const heroVisualRef = useRef<HTMLDivElement>(null);
 
+  // Fetch tasks from API
   useEffect(() => {
-    const storedTasks = window.localStorage.getItem(storageKey);
-    if (storedTasks) {
+    async function fetchTasks() {
       try {
-        const parsed = JSON.parse(storedTasks) as Task[];
-        if (Array.isArray(parsed)) {
-          setTasks(parsed);
+        const response = await fetch("/api/tasks");
+        const data = await response.json();
+        if (response.ok && Array.isArray(data.tasks)) {
+          setTasks(data.tasks);
+        } else {
+          console.error("Failed to fetch tasks:", data.error);
         }
-      } catch {
-        window.localStorage.removeItem(storageKey);
+      } catch (err) {
+        console.error("Error fetching tasks:", err);
       }
     }
-
-    setLoaded(true);
+    fetchTasks();
   }, []);
-
-  useEffect(() => {
-    if (loaded) {
-      window.localStorage.setItem(storageKey, JSON.stringify(tasks));
-    }
-  }, [loaded, tasks]);
 
   useEffect(() => {
     if (!loaderRef.current || !logoRef.current) {
@@ -215,7 +182,7 @@ export default function Home() {
     setErrors((current) => ({ ...current, [field]: undefined }));
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const result = validateForm(form);
@@ -224,25 +191,65 @@ export default function Home() {
       return;
     }
 
-    setTasks((current) => [createTask(form, current), ...current]);
-    setForm(initialForm);
-    setErrors({});
+    setIsSubmitting(true);
+    try {
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(result.values),
+      });
+      const data = await response.json();
+      if (response.ok && data.task) {
+        setTasks((current) => [data.task, ...current]);
+        setForm(initialForm);
+        setErrors({});
+      } else {
+        alert("Error creating task: " + (data.error || "Unknown error"));
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to create task");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
-  function markCompleted(taskId: string) {
-    setTasks((current) =>
-      current.map((task) => {
-        if (task.id !== taskId || task.status === "COMPLETED") {
-          return task;
-        }
-
-        return { ...task, status: "COMPLETED" };
-      }),
-    );
+  async function markCompleted(taskId: string) {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "COMPLETED" }),
+      });
+      const data = await response.json();
+      if (response.ok && data.task) {
+        setTasks((current) =>
+          current.map((task) => (task.id === taskId ? data.task : task))
+        );
+      } else {
+        alert("Error updating task: " + (data.error || "Unknown error"));
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to update task");
+    }
   }
 
-  function deleteTask(taskId: string) {
-    setTasks((current) => current.filter((task) => task.id !== taskId));
+  async function deleteTask(taskId: string) {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "DELETE",
+      });
+      if (response.ok) {
+        setTasks((current) => current.filter((task) => task.id !== taskId));
+      } else {
+        const data = await response.json();
+        alert("Error deleting task: " + (data.error || "Unknown error"));
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete task");
+    }
   }
 
   return (
@@ -340,26 +347,28 @@ export default function Home() {
           <form className="task-form" onSubmit={handleSubmit} noValidate>
             <h2>Create task</h2>
             <Field
-              error={errors.employeeName}
-              id="employeeName"
+              error={errors.employee_name}
+              id="employee_name"
               label="Employee Name"
             >
               <input
-                id="employeeName"
-                name="employeeName"
-                onChange={(event) => updateField("employeeName", event.target.value)}
+                id="employee_name"
+                name="employee_name"
+                onChange={(event) => updateField("employee_name", event.target.value)}
                 placeholder="e.g. Priya Sharma"
-                value={form.employeeName}
+                value={form.employee_name}
+                disabled={isSubmitting}
               />
             </Field>
 
-            <Field error={errors.taskName} id="taskName" label="Task Name">
+            <Field error={errors.task_name} id="task_name" label="Task Name">
               <input
-                id="taskName"
-                name="taskName"
-                onChange={(event) => updateField("taskName", event.target.value)}
+                id="task_name"
+                name="task_name"
+                onChange={(event) => updateField("task_name", event.target.value)}
                 placeholder="e.g. Prepare weekly report"
-                value={form.taskName}
+                value={form.task_name}
+                disabled={isSubmitting}
               />
             </Field>
 
@@ -369,6 +378,7 @@ export default function Home() {
                 name="priority"
                 onChange={(event) => updateField("priority", event.target.value as Priority)}
                 value={form.priority}
+                disabled={isSubmitting}
               >
                 <option value="">Select priority</option>
                 {priorities.map((priority) => (
@@ -379,8 +389,8 @@ export default function Home() {
               </select>
             </Field>
 
-            <button className="primary-button" type="submit">
-              Add Task
+            <button className="primary-button" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Adding..." : "Add Task"}
             </button>
           </form>
 
@@ -417,9 +427,9 @@ export default function Home() {
                 <tbody>
                   {filteredTasks.map((task) => (
                     <tr key={task.id}>
-                      <td className="mono">{task.employeeId}</td>
-                      <td>{task.employeeName}</td>
-                      <td>{task.taskName}</td>
+                      <td className="mono">{task.employee_id}</td>
+                      <td>{task.employee_name}</td>
+                      <td>{task.task_name}</td>
                       <td>
                         <span className={`badge priority-${task.priority.toLowerCase()}`}>
                           {titleCase(task.priority)}
